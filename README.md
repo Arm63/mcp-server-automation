@@ -102,6 +102,37 @@ Notes:
 - Tests are written using `appium-python-client` 5.x and `XCUITestOptions` API.
 - Capabilities include helpful flags for first-time WDA install: `showXcodeLog`, `useNewWDA`.
 
+### Smart iOS helpers (no accessibility IDs needed)
+
+Manual QA steps often reference visible text rather than accessibility identifiers. Use `src/utils/smart_ios.py` to act on elements by human-readable labels:
+
+```python
+from src.utils.smart_ios import click_by_text, enter_text_by_label, wait_for_text
+
+click_by_text(driver, "Sign In")
+enter_text_by_label(driver, "Email or Phone Number", "qa@example.com")
+wait_for_text(driver, "Password")
+```
+
+Under the hood, helpers use iOS predicate and class-chain locators, fuzzy matching, and spatial heuristics to find text fields near labels.
+
+### Real-device signing and stability env (recommended)
+
+Provide these env vars to avoid `xcodebuild` code 70 and WDA issues:
+
+- `TEAM_ID` (or `XCODE_ORG_ID`)
+- `XCODE_SIGNING_ID` (default `Apple Development`)
+- `UPDATED_WDA_BUNDLE_ID` (e.g., `com.company.WebDriverAgentRunner`)
+
+Extras enabled: `showXcodeLog=true`, `useNewWDA=true`, `waitForQuiescence=false`, WDA startup retries.
+
+### Appium base-path handling
+
+Tests automatically fall back between `APPIUM_URL` with and without `/wd/hub` when the server returns 404 "unknown command". You can set either:
+
+- `APPIUM_URL="http://127.0.0.1:4723"` (no base-path)
+- `APPIUM_URL="http://127.0.0.1:4723/wd/hub"` (with base-path)
+
 ### Playwright (web)
 ```bash
 npm run build
