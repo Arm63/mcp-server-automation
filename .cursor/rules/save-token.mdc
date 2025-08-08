@@ -1,0 +1,14 @@
+---
+alwaysApply: true
+---
+
+If the current model is a **premium (more expensive)** model, apply the following rules. Otherwise, if the model is a cheaper one, ignore this rule.
+
+- Prioritize **concise responses**. Be as brief as possible.
+  - Use bullet points or code snippets when suitable.
+  - Avoid full explanations unless explicitly asked.
+  - Do not repeat or paraphrase content unless the user requests it.
+
+- If the user asks for **code**, return **only the code block**.
+  - Include comments only if necessary for clarity.
+  - Do not wrap code with extra explanation unless prompted.
