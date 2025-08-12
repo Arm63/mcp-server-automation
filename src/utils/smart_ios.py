@@ -140,3 +140,11 @@ def enter_text_by_label(driver: WebDriver, label_text: str, value: str, timeout:
 
 def wait_for_text(driver: WebDriver, text: str, timeout: float = 10.0):
     return find_by_text(driver, text, timeout=timeout)
+
+
+def is_keyboard_visible(driver: WebDriver) -> bool:
+    try:
+        # appium driver exposes is_keyboard_shown on iOS
+        return bool(getattr(driver, "is_keyboard_shown", lambda: False)())
+    except Exception:
+        return False

@@ -1,7 +1,7 @@
 import { ManualTestCase } from '../types/test-case.type';
 
 export class PromptService {
-  generatePlaywrightPrompt(tc: ManualTestCase, target = 'playwright-web'): string {
+  generatePrompt(tc: ManualTestCase, target = 'pytest-appium-ios'): string {
     // Basic target-specific differences
     const header = `You are a senior QA automation engineer.
 Convert the following manual test case into an automated test script.
@@ -67,26 +67,38 @@ Expected Result: ${tc.expectedResult}
 Requirements:
 - Generate a runnable pytest (Python) script using Appium-Python-Client with XCUITest for iOS real device.
 - Read configuration from environment variables: APPIUM_URL, IOS_UDID, IOS_DEVICE_NAME, IOS_PLATFORM_VERSION, BUNDLE_ID or APP.
+- Use Appium v2 "options" API (XCUITestOptions) rather than deprecated desired_capabilities.
+- Include real-device signing and WDA stability caps from env when provided: TEAM_ID/XCODE_ORG_ID, XCODE_SIGNING_ID (default Apple Development), UPDATED_WDA_BUNDLE_ID. Enable autoAcceptAlerts. Prefer useNewWDA/showXcodeLog/waitForQuiescence=false and WDA startup retries.
+- Import smart iOS helpers from src.utils.smart_ios (add sys.path insertion so the import works from output/...). Use human-readable text actions where possible.
 - Map each step as comments; leave actionable TODO placeholders.
 - Output ONLY the code, wrapped in a single triple-backtick code block \`\`\`python ... \`\`\`.
 
 \`\`\`python
 import os
 import pytest
+import sys as _sys, os as _os
 from appium import webdriver
+from appium.options.ios import XCUITestOptions
+from appium.webdriver.common.appiumby import AppiumBy
+
+# Allow importing project helpers from src/ when running from output/generated/... path
+_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '../../..'))
+(_root not in _sys.path) and _sys.path.append(_root)
+from src.utils.smart_ios import click_by_text, enter_text_by_label, wait_for_text
 
 
 @pytest.fixture
 def driver():
-    server_url = os.environ.get('APPIUM_URL', 'http://127.0.0.1:4723')
+    server_url = os.environ.get('APPIUM_URL', 'http://127.0.0.1:4723/wd/hub')
     desired_caps = {
         'platformName': 'iOS',
         'appium:automationName': 'XCUITest',
-        'appium:udid': os.environ.get('IOS_UDID'),
-        'appium:deviceName': os.environ.get('IOS_DEVICE_NAME'),
-        'appium:platformVersion': os.environ.get('IOS_PLATFORM_VERSION'),
+        'appium:udid': os.environ.get('IOS_UDID') or os.environ.get('DEVICE_UDID'),
+        'appium:deviceName': os.environ.get('IOS_DEVICE_NAME') or os.environ.get('DEVICE_NAME'),
+        'appium:platformVersion': os.environ.get('IOS_PLATFORM_VERSION') or os.environ.get('PLATFORM_VERSION'),
         'appium:newCommandTimeout': 120,
         'appium:noReset': True,
+        'appium:autoAcceptAlerts': True,
     }
     bundle_id = os.environ.get('BUNDLE_ID')
     app_path = os.environ.get('APP')
@@ -95,54 +107,60 @@ def driver():
     if app_path:
         desired_caps['appium:app'] = app_path
 
-    driver = webdriver.Remote(command_executor=server_url, desired_capabilities=desired_caps)
+    team_id = os.environ.get('TEAM_ID') or os.environ.get('XCODE_ORG_ID')
+    signing_id = os.environ.get('XCODE_SIGNING_ID') or 'Apple Development'
+    updated_wda_bundle = os.environ.get('UPDATED_WDA_BUNDLE_ID')
+    if team_id:
+        desired_caps['appium:xcodeOrgId'] = team_id
+        desired_caps['appium:xcodeSigningId'] = signing_id
+    if updated_wda_bundle:
+        desired_caps['appium:updatedWDABundleId'] = updated_wda_bundle
+    desired_caps.setdefault('appium:useNewWDA', True)
+    desired_caps.setdefault('appium:showXcodeLog', True)
+    desired_caps.setdefault('appium:waitForQuiescence', False)
+    desired_caps.setdefault('appium:wdaStartupRetries', 3)
+    desired_caps.setdefault('appium:wdaStartupRetryInterval', 10000)
+
+    options = XCUITestOptions().load_capabilities(desired_caps)
+    driver = webdriver.Remote(command_executor=server_url, options=options)
     yield driver
     driver.quit()
+
+
+def click_first_available_text(driver, texts, timeout_per_try=8):
+    last_err = None
+    for label in texts:
+        try:
+            return click_by_text(driver, label, timeout=timeout_per_try)
+        except Exception as e:
+            last_err = e
+            continue
+    if last_err:
+        raise last_err
+    raise AssertionError('None of the provided labels were found: ' + ', '.join(texts))
 
 
 def test_${tc.id.replace(/[^A-Za-z0-9_]/g, '_')}_${title.replace(/[^A-Za-z0-9_]/g, '_').toLowerCase()}(driver):
 ${stepsBlock}
 
-    # TODO: Implement the above steps using driver.find_element and actions
-    # Example: driver.find_element(by=AppiumBy.ACCESSIBILITY_ID, value='login').click()
+    # Example flow using human-readable labels
+    click_first_available_text(driver, ["Sign In", "Sign in", "Log In", "Login", "Continue with Email", "Get Started"], timeout_per_try=10)
+    wait_for_text(driver, "Email or Phone Number", timeout=15)
+    enter_text_by_label(driver, "Email or Phone Number", os.environ.get('TEST_EMAIL', 'test@example.com'), timeout=15)
+    click_first_available_text(driver, ["Continue", "Next"], timeout_per_try=10)
+    wait_for_text(driver, "Password", timeout=15)
+
     # Final expected result:
     # ${tc.expectedResult}
 \`\`\`
 `.trim();
     }
 
-    // Default: playwright web (useful for web flows)
-      return `
-${header}
-### Test Case:
-ID: ${tc.id}
-Title: ${tc.title}
-${preconditionsBlock ? `\n${preconditionsBlock}\n` : ''}
-Steps:
-${stepsText}
-
-Expected Result: ${tc.expectedResult}
-
-Requirements:
-- Use Playwright Test (TypeScript)
-- Use async/await
-- Comment each step with the original manual step text
-- Use Playwright "page.locator" where possible and "expect" for assertions
-- If a step mentions 'tap' or 'press' assume click, if mentions 'enter' assume fill
-- Output ONLY the code, wrapped in a single triple-backtick code block \`\`\`ts ... \`\`\`
-    
-\`\`\`ts
-import { test, expect } from '@playwright/test';
-
-test('${tc.title.replace(/'/g, "\\'")}', async ({ page }) => {
-  // Step 1: ${tc.steps[0]}
-  // TODO: mapped selector and code
-});
-\`\`\`
-`.trim();
+    // Fallback: provide a minimal informative message for unsupported targets
+    return `Unsupported target: ${target}. Supported targets: pytest-appium-ios, appium-js.`;
   }
 
-  generateSimpleTest(tc: ManualTestCase, target = 'playwright-web'): string {
+  generateSimpleTest(tc: ManualTestCase, target = 'pytest-appium-ios'): string {
     const title = tc.title.replace(/'/g, "\\'");
     if (target === 'appium-js') {
       const stepsBlock = tc.steps
@@ -292,17 +310,7 @@ ${actions}
 `;
     }
 
-    // Default: Playwright web
-    return `import { test, expect } from '@playwright/test';
-
-test('${title}', async ({ page }) => {
-${tc.steps
-  .map((s, i) => `  // Step ${i + 1}: ${s}\n  // TODO: implement`) 
-  .join('\n\n')}
-
-  // Expected: ${tc.expectedResult}
-  expect(true).toBeTruthy();
-});
-`;
+    // Default: return a minimal placeholder for unsupported targets
+    return `# Unsupported target: ${target}. Supported targets: pytest-appium-ios, appium-js.`;
   }
 }
