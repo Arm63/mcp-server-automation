@@ -31,23 +31,12 @@ class RunnerService {
         await fs_1.promises.writeFile(filePath, code, 'utf8');
         return filePath;
     }
-    // Placeholder for future execution (Playwright/Appium/etc.)
+    // Placeholder for future execution (Appium/Pytest/etc.)
     async runSavedTest(filePath) {
-        const isPlaywright = /playwright/.test(filePath);
         const isAppiumJs = /appium-js/.test(filePath);
         const isPytest = /pytest-appium-ios/.test(filePath) || /\.py$/.test(filePath);
         let cmd;
-        if (isPlaywright) {
-            const hasPlaywright = await this.checkPlaywrightInstalled();
-            if (!hasPlaywright) {
-                return {
-                    status: 'missing-deps',
-                    message: 'Missing @playwright/test. Install with: npm i -D @playwright/test. You may also need to run: npx playwright install'
-                };
-            }
-            cmd = `npx --yes playwright test "${filePath}" --reporter=list`;
-        }
-        else if (isAppiumJs) {
+        if (isAppiumJs) {
             const hasWdio = await this.checkWdioInstalled();
             const ext = path_1.default.extname(filePath);
             if (ext === '.ts') {
@@ -81,15 +70,6 @@ class RunnerService {
                 resolve({ status: 'ok', exitCode: 0, stdout, stderr });
             });
         });
-    }
-    async checkPlaywrightInstalled() {
-        try {
-            const pkgPath = require.resolve('@playwright/test/package.json', { paths: [process.cwd()] });
-            return Boolean(pkgPath);
-        }
-        catch {
-            return false;
-        }
     }
     async checkWdioInstalled() {
         try {

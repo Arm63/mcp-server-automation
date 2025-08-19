@@ -1,0 +1,5 @@
+---
+alwaysApply: false
+---
+
+We implemented  custom msp server whose reponsibility is download from testiny.io testcases whiches are wroten by manual qas, wnd that json we converted into automated tests

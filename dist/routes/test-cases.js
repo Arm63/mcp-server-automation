@@ -17,11 +17,11 @@ const isAutomationCandidate = (labels = []) => {
 };
 /**
  * GET /api/test-cases/:id/generate
- * Optional query param: ?target=playwright-web|appium-js|espresso
+ * Optional query param: ?target=pytest-appium-ios|appium-js
  */
 router.get('/test-cases/:id/generate', async (req, res) => {
     const { id } = req.params;
-    const target = req.query.target || 'playwright-web';
+    const target = req.query.target || 'pytest-appium-ios';
     const save = String(req.query.save || 'true') === 'true';
     const run = String(req.query.run || 'false') === 'true';
     const force = String(req.query.force || 'false') === 'true';
@@ -37,8 +37,8 @@ router.get('/test-cases/:id/generate', async (req, res) => {
                 error: 'Test case not flagged for automation. Add label: automation:required'
             });
         }
-        // Select prompt variant by target (for Android, user might prefer Appium/Espresso)
-        const prompt = promptSvc.generatePlaywrightPrompt(tc, target);
+        // Select prompt variant by target
+        const prompt = promptSvc.generatePrompt(tc, target);
         // Use mock generator when explicitly requested
         let generated;
         if (mock) {
@@ -59,8 +59,11 @@ router.get('/test-cases/:id/generate', async (req, res) => {
                 }
             }
         }
-        // Basic post-processing: strip triple-backticks and whitespace
-        const cleaned = generated.replace(/^\s*```(?:ts|typescript)?\s*/i, '').replace(/\s*```$/, '').trim();
+        // Basic post-processing: strip leading/trailing triple backticks (any language tag)
+        const cleaned = generated
+            .replace(/^\s*```[a-zA-Z]*\s*/i, '')
+            .replace(/\s*```\s*$/, '')
+            .trim();
         let savedPath;
         let runResult;
         if (save) {
